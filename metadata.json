@@ -1,0 +1,8 @@
+{
+  "name": "Remix: Remix: Focus Academy Student Management System",
+  "description": "A powerful Central Administration Panel aligned with the Ethiopian education system and school administration standards, featuring profile management, user control, academic promotion, automated exam calculations, Amharic translations, and document generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

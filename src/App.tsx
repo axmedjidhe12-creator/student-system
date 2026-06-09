@@ -19,7 +19,8 @@ import {
   Sun,
   Moon,
   ShieldAlert,
-  Camera
+  Camera,
+  BookOpen
 } from 'lucide-react';
 
 import { 
@@ -47,6 +48,7 @@ import ReportsCenter from './components/ReportsCenter';
 import Login from './components/Login';
 import StudentPortal from './components/StudentPortal';
 import MasterAdminCenter from './components/MasterAdminCenter';
+import UserManual from './components/UserManual';
 
 export default function App() {
   const [lang, setLang] = useState<'EN' | 'AM' | 'SO'>('EN');
@@ -56,7 +58,7 @@ export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   // Global Academic States loaded in local state memory for CRUD and full dynamic feedback
-  const [activeTab, setActiveTab] = useState<'Dashboard' | 'School' | 'Users' | 'Academics' | 'Finance' | 'Reports' | 'MyInfo' | 'AdminCenter'>('Dashboard');
+  const [activeTab, setActiveTab ] = useState<'Dashboard' | 'School' | 'Users' | 'Academics' | 'Finance' | 'Reports' | 'MyInfo' | 'AdminCenter' | 'SystemGuide'>('Dashboard');
   const [schoolProfile, setSchoolProfile] = useState(initialSchoolProfile);
   const [academicYears, setAcademicYears] = useState(initialAcademicYears);
   const [teachers, setTeachers] = useState(initialTeachers);
@@ -75,6 +77,12 @@ export default function App() {
   const [bursarPasscode, setBursarPasscode] = useState("8844");
   const [bursarName, setBursarName] = useState("Aster Hailu (Senior Bursar)");
   const [isFinanceLocked, setIsFinanceLocked] = useState(false);
+
+  // Editable Admin Credentials
+  const [adminEmail, setAdminEmail] = useState("admin@focusacademy.edu.et");
+  const [adminPassword, setAdminPassword] = useState("admin123");
+  const [principalEmail, setPrincipalEmail] = useState("abraham.a@focusacademy.edu.et");
+  const [principalPassword, setPrincipalPassword] = useState("admin123");
   const [authorizedFeesCodes, setAuthorizedFeesCodes] = useState([
     { id: "fc-1", code: "CBE-TX-8902", type: "Tuition Fee", valName: "Yonas Bekele", amount: 4500, state: "Active_Authorized", dateGen: "2026-06-08" },
     { id: "fc-2", code: "TLR-77-5110", type: "Sports & Lab Fee", valName: "Mahlet Tesfaye", amount: 1500, state: "Claimed_Used", dateGen: "2026-06-08" },
@@ -139,6 +147,10 @@ export default function App() {
           teachers={teachers} 
           students={students}
           schoolProfile={schoolProfile}
+          adminEmail={adminEmail}
+          adminPassword={adminPassword}
+          principalEmail={principalEmail}
+          principalPassword={principalPassword}
         />
       </div>
     );
@@ -277,12 +289,17 @@ export default function App() {
             <nav className="space-y-1">
               {currentUser?.role === 'Student' ? (
                 [
-                  { id: 'MyInfo', label: lang === 'EN' ? 'My Information' : 'የኔ መረጃ', icon: <FileSpreadsheet size={18} /> }
+                  { id: 'MyInfo', label: lang === 'EN' ? 'My Information' : 'የኔ መረጃ', icon: <FileSpreadsheet size={18} /> },
+                  { id: 'SystemGuide', label: lang === 'EN' ? 'User Manual' : 'Buugga Isticmaalka', icon: <BookOpen size={18} /> }
                 ].map((navItem) => (
                   <button
                     key={navItem.id}
                     onClick={() => setActiveTab(navItem.id as any)}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs font-semibold bg-amber-600/10 text-amber-500 font-bold border-l-4 border-amber-600 cursor-pointer"
+                    className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-left text-xs font-semibold border-l-4 cursor-pointer transition-all ${
+                      activeTab === navItem.id
+                        ? 'bg-amber-600/10 text-amber-500 font-bold border-amber-600'
+                        : 'border-transparent hover:bg-slate-800 hover:text-white text-slate-400'
+                    }`}
                   >
                     {navItem.icon}
                     <span>{navItem.label}</span>
@@ -302,7 +319,8 @@ export default function App() {
                   ...(currentUser?.role !== 'Teacher' ? [
                     { id: 'Finance', label: t.financialManagement, icon: <CircleDollarSign size={18} /> }
                   ] : []),
-                  { id: 'Reports', label: t.reportsCenter, icon: <Award size={18} /> }
+                  { id: 'Reports', label: t.reportsCenter, icon: <Award size={18} /> },
+                  { id: 'SystemGuide', label: lang === 'EN' ? 'Operations Manual' : 'Hagaha Hawlaha', icon: <BookOpen size={18} /> }
                 ].map((navItem) => (
                   <button
                     key={navItem.id}
@@ -436,6 +454,14 @@ export default function App() {
               setIsFinanceLocked={setIsFinanceLocked}
               authorizedFeesCodes={authorizedFeesCodes}
               setAuthorizedFeesCodes={setAuthorizedFeesCodes}
+              adminEmail={adminEmail}
+              setAdminEmail={setAdminEmail}
+              adminPassword={adminPassword}
+              setAdminPassword={setAdminPassword}
+              principalEmail={principalEmail}
+              setPrincipalEmail={setPrincipalEmail}
+              principalPassword={principalPassword}
+              setPrincipalPassword={setPrincipalPassword}
             />
           )}
 
@@ -445,6 +471,10 @@ export default function App() {
               scoreRecords={scoreRecords}
               lang={lang}
             />
+          )}
+
+          {activeTab === 'SystemGuide' && (
+            <UserManual lang={lang} />
           )}
 
         </main>

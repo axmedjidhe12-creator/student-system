@@ -26,9 +26,24 @@ interface LoginProps {
   teachers: Teacher[];
   students: Student[];
   schoolProfile?: any;
+  adminEmail?: string;
+  adminPassword?: string;
+  principalEmail?: string;
+  principalPassword?: string;
 }
 
-export default function Login({ onLogin, lang, setLang, teachers, students, schoolProfile }: LoginProps) {
+export default function Login({ 
+  onLogin, 
+  lang, 
+  setLang, 
+  teachers, 
+  students, 
+  schoolProfile,
+  adminEmail,
+  adminPassword,
+  principalEmail,
+  principalPassword
+}: LoginProps) {
   const [roleTab, setRoleTab] = useState<'Admin' | 'Teacher' | 'Student'>('Admin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -114,22 +129,27 @@ export default function Login({ onLogin, lang, setLang, teachers, students, scho
 
     // Attempt Admin Authentication
     if (roleTab === 'Admin') {
-      const isSuperAdmin = (email.trim() === "admin@focusacademy.edu.et");
-      const isPrincipal = (email.trim() === "abraham.a@focusacademy.edu.et");
+      const activeAdminEmail = adminEmail || "admin@focusacademy.edu.et";
+      const activeAdminPass = adminPassword || "admin123";
+      const activePrincipalEmail = principalEmail || "abraham.a@focusacademy.edu.et";
+      const activePrincipalPass = principalPassword || "admin123";
 
-      if (isSuperAdmin && password === "admin123") {
+      const isSuperAdmin = (email.trim().toLowerCase() === activeAdminEmail.trim().toLowerCase());
+      const isPrincipal = (email.trim().toLowerCase() === activePrincipalEmail.trim().toLowerCase());
+
+      if (isSuperAdmin && password === activeAdminPass) {
         onLogin({
           id: "usr-admin-1",
           name: "Super Administrator Team",
-          email: "admin@focusacademy.edu.et",
+          email: activeAdminEmail,
           role: "Super_Admin"
         });
         return;
-      } else if (isPrincipal && password === "admin123") {
+      } else if (isPrincipal && password === activePrincipalPass) {
         onLogin({
           id: "usr-pr-1",
           name: "Dr. Abraham Assefa",
-          email: "abraham.a@focusacademy.edu.et",
+          email: activePrincipalEmail,
           role: "Principal"
         });
         return;
@@ -143,8 +163,8 @@ export default function Login({ onLogin, lang, setLang, teachers, students, scho
           return;
         }
         setError(lang === 'EN' 
-          ? 'Invalid Admin credentials or password. Check the demo options below!' 
-          : lang === 'AM' ? 'ልክ ያልሆነ የአስተዳዳሪ መለያ ቁጥር ወይም የይለፍ ቃል ነው።' : 'Macluumaadka Maamulaha ee khaldan. Fiiri fursadaha tijaabada ee hoose!');
+          ? 'Invalid Admin credentials or password. Please try again.' 
+          : lang === 'AM' ? 'ልክ ያልሆነ የአስተዳዳሪ መለያ ቁጥር ወይም የይለፍ ቃል ነው። እባክዎ እንደገና ይሞክሩ።' : 'Macluumaadka Maamulaha ee khaldan. Fadlan isku day markale!');
       }
     } else if (roleTab === 'Teacher') {
       // Attempt Teacher Authentication (supports email or teacherCode)
@@ -174,8 +194,8 @@ export default function Login({ onLogin, lang, setLang, teachers, students, scho
           return;
         }
         setError(lang === 'EN'
-          ? 'Teacher profile not found. Review the certified teacher list below.'
-          : lang === 'AM' ? 'የመምህር መገለጫ አልተገኘም። እባክዎ ከታች ያለውን የመምህራን ዝርዝር ይመልከቱ።' : 'Xogta macallinka lama helin. Fiiri liiska macallimiinta ee hoose.');
+          ? 'Teacher profile not found. Please verify your credentials or contact the administrator.'
+          : lang === 'AM' ? 'የመምህር መገለጫ አልተገኘም። እባክዎ ዋና አስተዳዳሪውን ያነጋግሩ።' : 'Xogta macallinka lama helin. Fadlan kala xiriir maamulaha nidaamka.');
       }
     } else {
       // Role is Student
@@ -196,8 +216,8 @@ export default function Login({ onLogin, lang, setLang, teachers, students, scho
         });
       } else {
         setError(lang === 'EN'
-          ? 'Student Access Code not recognized. Try "1001" or "1002"!'
-          : lang === 'AM' ? 'የተማሪ መግቢያ ኮድ የተሳሳተ ነው እባክዎ "1001" ወይም "1002" በመጠቀም ይሞክሩ!' : 'Koodhka gelitaanka Ardayga lama garan. Isku day "1001" ama "1002"!');
+          ? 'Student Access Code not recognized. Please check your credentials.'
+          : lang === 'AM' ? 'የተማሪ መግቢያ ኮድ አልታወቀም። እባክዎ መለያዎን ይፈትሹ።' : 'Koodhka gelitaanka Ardayga lama garan. Fadlan hubi macluumaadkaaga.');
       }
     }
   };
@@ -349,7 +369,7 @@ export default function Login({ onLogin, lang, setLang, teachers, students, scho
                     {lang === 'EN' ? 'Account Password' : 'Erayga Sirta ah'}
                   </label>
                   <span className="text-[10px] text-slate-550 italic">
-                    {lang === 'EN' ? 'Click shortcuts below' : 'Guji jid-gaabyada hoose'}
+                    {lang === 'EN' ? 'Secure Connection' : 'Xiriir Sugan'}
                   </span>
                 </div>
                 <div className="relative">
@@ -386,36 +406,7 @@ export default function Login({ onLogin, lang, setLang, teachers, students, scho
 
         </div>
 
-        {/* Certified / Sandbox Live shortcuts block */}
-        <div className="bg-[#111318]/45 border border-slate-800/40 rounded-xl p-4.5 space-y-3">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-            <UserCheck size={12} className="text-amber-500" />
-            <span>{lang === 'EN' ? 'Certified Demo Accounts (One-Tap Autofill)' : 'Akoonnada Tijaabada ee Shahaadiga (Guji hal mar)'}</span>
-          </div>
-
-          <div className="space-y-1.5">
-            {demoAccounts[roleTab].map((acc, i) => (
-              <button
-                key={i}
-                type="button"
-                onClick={() => handleAutofill(acc)}
-                className="w-full p-2 bg-[#16181D] hover:bg-slate-800/80 border border-slate-850 hover:border-amber-600/30 rounded-lg flex items-center justify-between text-left transition-all cursor-pointer group"
-              >
-                <div>
-                  <div className="text-xs font-semibold text-slate-250 group-hover:text-amber-500 transition-colors">
-                    {acc.name}
-                  </div>
-                  <div className="text-[10px] text-slate-550 italic font-mono">
-                    {roleTab === 'Student' ? `Access Code: ${acc.password}` : acc.email} <span className="text-slate-800 font-sans">•</span> {acc.role}
-                  </div>
-                </div>
-                <span className="text-[9px] font-mono bg-slate-850 text-slate-400 px-1.5 py-0.5 rounded group-hover:bg-amber-600/10 group-hover:text-amber-500 font-bold">
-                  {roleTab === 'Student' ? `Code: ${acc.password}` : acc.password}
-                </span>
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Safe, real production layout. Certified Demo Accounts shortcut panel has been clean-removed for production packaging. */}
 
         <div className="text-center text-[10px] text-slate-600 font-sans">
           {lang === 'EN' ? 'Focus Academy Certified Core 2018-2019 E.C.' : 'Akaademiyada Focus oo Shahaado Haysata Core 2018-2019 E.C.'}

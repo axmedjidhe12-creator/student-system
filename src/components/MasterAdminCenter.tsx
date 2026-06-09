@@ -21,8 +21,23 @@ import {
   UserCheck,
   Send,
   AlertTriangle,
-  CircleDollarSign
+  CircleDollarSign,
+  Cloud,
+  HardDrive,
+  Save,
+  Upload
 } from 'lucide-react';
+
+import { 
+  getSavedFirebaseConfig, 
+  saveFirebaseConfig, 
+  clearFirebaseConfig, 
+  getFirebaseInstance,
+  uploadCollectionToFirestore,
+  downloadCollectionFromFirestore
+} from '../lib/firebase';
+
+import FirebaseSyncControl from './FirebaseSyncControl';
 
 interface MasterAdminCenterProps {
   students: Student[];
@@ -42,6 +57,14 @@ interface MasterAdminCenterProps {
   setIsFinanceLocked: (locked: boolean) => void;
   authorizedFeesCodes: any[];
   setAuthorizedFeesCodes: React.Dispatch<React.SetStateAction<any[]>>;
+  adminEmail: string;
+  setAdminEmail: (email: string) => void;
+  adminPassword: string;
+  setAdminPassword: (pass: string) => void;
+  principalEmail: string;
+  setPrincipalEmail: (email: string) => void;
+  principalPassword: string;
+  setPrincipalPassword: (pass: string) => void;
 }
 
 export default function MasterAdminCenter({
@@ -61,9 +84,17 @@ export default function MasterAdminCenter({
   isFinanceLocked,
   setIsFinanceLocked,
   authorizedFeesCodes,
-  setAuthorizedFeesCodes
+  setAuthorizedFeesCodes,
+  adminEmail,
+  setAdminEmail,
+  adminPassword,
+  setAdminPassword,
+  principalEmail,
+  setPrincipalEmail,
+  principalPassword,
+  setPrincipalPassword
 }: MasterAdminCenterProps) {
-  const [activeSubTab, setActiveSubTab] = useState<'MoESync' | 'TeachersCodes' | 'SystemSettings' | 'AuditLogs' | 'DataMigration' | 'FeeAdmin'>('MoESync');
+  const [activeSubTab, setActiveSubTab] = useState<'MoESync' | 'TeachersCodes' | 'SystemSettings' | 'AuditLogs' | 'DataMigration' | 'FeeAdmin' | 'FirebaseSync'>('MoESync');
   
   // Search query for teachers
   const [teacherSearch, setTeacherSearch] = useState("");
@@ -173,7 +204,7 @@ export default function MasterAdminCenter({
       case 'sheets': return 'Google Sheets Export';
       case 'database': return 'Database/SQL Dump';
       case 'sms': return 'Legacy SMS Export File';
-      case 'pdf': return 'PDF Student List (AI Scraped)';
+      case 'pdf': return 'PDF Student List (Parsed Scan)';
       default: return 'Source File';
     }
   };
@@ -973,7 +1004,8 @@ std-3,Abebe Kassa,Stationery Fee,2500,0,2026-07-01`
           { id: 'SystemSettings', label: lang === 'EN' ? "Academic Settings" : "የትምህርት መመዘኛ", icon: <Sliders size={14} /> },
           { id: 'FeeAdmin', label: lang === 'EN' ? "Fee Security & Keys" : "የክፍያ ፈቃድ ማዕከል", icon: <CircleDollarSign size={14} /> },
           { id: 'AuditLogs', label: lang === 'EN' ? "Security Auditor" : "የደህንነት እንቅስቃሴ", icon: <ShieldAlert size={14} /> },
-          { id: 'DataMigration', label: lang === 'EN' ? "Data Migration & Import" : "የዳታ ማዘዣ ማስተባበሪያ", icon: <Database size={14} /> }
+          { id: 'DataMigration', label: lang === 'EN' ? "Data Migration & Import" : "የዳታ ማዘዣ ማስተባበሪያ", icon: <Database size={14} /> },
+          { id: 'FirebaseSync', label: lang === 'EN' ? "Firebase Cloud Sync" : "የደመና ዳታቤዝ", icon: <Cloud size={14} /> }
         ] as const).map((tab) => (
           <button
             key={tab.id}
@@ -1367,6 +1399,92 @@ std-3,Abebe Kassa,Stationery Fee,2500,0,2026-07-01`
               </p>
             </div>
 
+            {/* Editable Administrator Credentials Form */}
+            <div className="bg-slate-950/25 border border-slate-850 p-4 rounded-xl space-y-4 md:col-span-2">
+              <div className="flex items-center gap-2 border-b border-slate-850/50 pb-2">
+                <Key className="text-amber-500" size={16} />
+                <span className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                  {lang === 'EN' ? "Change Master Admin & Principal Security Credentials" : "የበላይ ማስተዳደሪያ የይለፍ ቃላት ማስተካከያ"}
+                </span>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* 1. Super Admin Credentials */}
+                <div className="space-y-3 bg-[#111318]/50 p-3 rounded-lg border border-slate-850">
+                  <span className="text-[11px] font-bold text-amber-500 block uppercase">
+                    {lang === 'EN' ? "Super Admin Account" : "ዋና ሥራ አስኪያጅ መለያ ቁጥር"}
+                  </span>
+                  
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[10px] text-slate-450 block mb-1">{lang === 'EN' ? "Official Email" : "የኢሜይል አድራሻ"}</label>
+                      <input 
+                        type="email"
+                        value={adminEmail}
+                        onChange={(e) => {
+                          setAdminEmail(e.target.value);
+                          triggerToast(lang === 'EN' ? "Super Admin Email updated!" : "ዋና ሥራ አስኪያጅ ኢሜይል ተቀይሯል!");
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-amber-600 rounded px-2.5 py-1.5 text-xs text-white outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-450 block mb-1">{lang === 'EN' ? "Account Password" : "መሳሪያ በይለፍ ቃል"}</label>
+                      <input 
+                        type="text"
+                        value={adminPassword}
+                        onChange={(e) => {
+                          setAdminPassword(e.target.value);
+                          triggerToast(lang === 'EN' ? "Super Admin Password updated!" : "የይለፍ ቃል ተቀይሯል!");
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-amber-600 rounded px-2.5 py-1.5 text-xs text-white outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Principal / Director Credentials */}
+                <div className="space-y-3 bg-[#111318]/50 p-3 rounded-lg border border-slate-850">
+                  <span className="text-[11px] font-bold text-amber-500 block uppercase">
+                    {lang === 'EN' ? "Principal Account" : "ዶ/ር አብርሃም አሰፋ መለያ"}
+                  </span>
+                  
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[10px] text-slate-450 block mb-1">{lang === 'EN' ? "Official Email" : "የኢሜይል አድራሻ"}</label>
+                      <input 
+                        type="email"
+                        value={principalEmail}
+                        onChange={(e) => {
+                          setPrincipalEmail(e.target.value);
+                          triggerToast(lang === 'EN' ? "Principal Email updated!" : "የመምህራን አለቃ ኢሜይል ተቀይሯል!");
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-amber-600 rounded px-2.5 py-1.5 text-xs text-white outline-none font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-slate-450 block mb-1">{lang === 'EN' ? "Account Password" : "መሳሪያ በይለፍ ቃል"}</label>
+                      <input 
+                        type="text"
+                        value={principalPassword}
+                        onChange={(e) => {
+                          setPrincipalPassword(e.target.value);
+                          triggerToast(lang === 'EN' ? "Principal Password updated!" : "የይለፍ ቃል ተቀይሯል!");
+                        }}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-amber-600 rounded px-2.5 py-1.5 text-xs text-white outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-amber-600/10 text-amber-500 p-2.5 text-[10px] rounded-lg border border-amber-600/20 font-sans">
+                {lang === 'EN' 
+                  ? "✓ System changes apply instantly in local memory. Users can login with these new custom configurations immediately." 
+                  : "✓ እነዚህ ለውጦች በቀጥታ ሲስተሙ ላይ ወዲያውኑ ይሰራሉ፤ አሁን bashaashi-ka iyo password-da cusub ayaad ku gali kartaa."}
+              </div>
+            </div>
+
           </div>
         </div>
       )}
@@ -1518,7 +1636,7 @@ std-3,Abebe Kassa,Stationery Fee,2500,0,2026-07-01`
 
                   <div className="p-3.5 bg-slate-950/30 border border-slate-850 rounded-xl space-y-1.5 text-xs text-slate-400 font-sans">
                     <span className="font-bold text-slate-200 block">✨ Pro-tip:</span>
-                    <span>Columns don't need to match perfectly. Our AI Smart Column Mapper maps headings in real-time.</span>
+                    <span>Columns don't need to match perfectly. Our Intelligent Column Parser maps headings in real-time.</span>
                   </div>
                 </div>
 
@@ -2495,6 +2613,20 @@ std-3,Abebe Kassa,Stationery Fee,2500,0,2026-07-01`
             </div>
           </div>
         </div>
+      )}
+      {activeSubTab === 'FirebaseSync' && (
+        <FirebaseSyncControl 
+          lang={lang}
+          students={students}
+          setStudents={setStudents}
+          teachers={teachers}
+          setTeachers={setTeachers}
+          scoreRecords={scoreRecords}
+          setScoreRecords={setScoreRecords}
+          invoices={invoices}
+          setInvoices={setInvoices}
+          triggerToast={triggerToast}
+        />
       )}
 
     </div>

@@ -48,7 +48,7 @@ interface MasterAdminCenterProps {
   setScoreRecords: (records: ScoreRecord[]) => void;
   invoices: Invoice[];
   setInvoices: (invoices: Invoice[]) => void;
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
   bursarPasscode: string;
   setBursarPasscode: (code: string) => void;
   bursarName: string;

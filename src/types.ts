@@ -147,7 +147,7 @@ export interface PaymentHistoryEntry {
   receiptId: string;
   date: string;
   amountPaid: number;
-  paymentMethod: 'Telebirr' | 'CBE Birr' | 'Awash Bank Transfer' | 'Commercial Bank of Ethiopia (CBE)' | 'Cash';
+  paymentMethod: 'Telebirr' | 'CBE Birr' | 'Awash Bank Transfer' | 'Commercial Bank of Ethiopia (CBE)' | 'Cash' | 'Cooppay-Birr';
   referenceNo: string; // Bank slip transaction ID
 }
 
@@ -162,3 +162,19 @@ export interface AttendanceRecord {
     remarks?: string;
   }[];
 }
+
+export interface VideoCourse {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  tutor: string;
+  duration: string;
+  lessonsCount: number;
+  subject: string;
+  videoUrl: string;
+  chapters: string[];
+  allowedGrades?: string[];
+  allowedSections?: string[];
+}
+

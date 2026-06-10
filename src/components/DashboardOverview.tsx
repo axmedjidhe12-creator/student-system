@@ -28,7 +28,7 @@ interface DashboardOverviewProps {
   invoices: Invoice[];
   scoreRecords: ScoreRecord[];
   t: AppTranslations;
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
   currentUser: any;
   attendance: AttendanceRecord[];
 }

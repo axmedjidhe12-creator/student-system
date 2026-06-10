@@ -25,7 +25,7 @@ interface SchoolManagementProps {
   academicYears: AcademicYear[];
   setAcademicYears: (years: AcademicYear[]) => void;
   t: AppTranslations;
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
 }
 
 export default function SchoolManagement({

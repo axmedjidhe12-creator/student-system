@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Building2, 
   Users, 
@@ -33,7 +33,8 @@ import {
   initialScoreRecords, 
   initialTimetable, 
   initialAttendance,
-  standardSubjects
+  standardSubjects,
+  initialVideoCourses
 } from './data';
 
 import { translations } from './translations';
@@ -51,11 +52,87 @@ import MasterAdminCenter from './components/MasterAdminCenter';
 import UserManual from './components/UserManual';
 
 export default function App() {
-  const [lang, setLang] = useState<'EN' | 'AM' | 'SO'>('EN');
+  const [lang, setLang] = useState<'EN' | 'SO'>('EN');
   const t = translations[lang];
 
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
+
+  // Automated payment gateway redirect verification effect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gateway = params.get('payment_gateway');
+    const status = params.get('payment_status');
+    const txRef = params.get('tx_ref');
+    const invoiceId = params.get('invoice_id');
+    const amountStr = params.get('amount');
+    const sessionId = params.get('session_id');
+
+    if (status === 'success' && txRef && invoiceId) {
+      const verifyPayment = async () => {
+        try {
+          const verifyUrl = gateway === 'stripe'
+            ? `/api/payments/stripe/verify/${txRef}${sessionId ? `?sessionId=${sessionId}` : ''}`
+            : `/api/payments/chapa/verify/${txRef}`;
+
+          const res = await fetch(verifyUrl);
+          const verification = await res.json();
+
+          if (verification.status === 'success') {
+            // Update invoice securely
+            setInvoices((prevInvoices: any[]) => {
+              return prevInvoices.map((inv) => {
+                if (inv.id === invoiceId) {
+                  const paidContribution = Number(amountStr) || inv.balance;
+                  const nextPaid = Math.min(inv.amount, inv.paidAmount + paidContribution);
+                  const nextBal = Math.max(0, inv.amount - nextPaid);
+
+                  // Prevent logging duplicates if refreshed
+                  const isAlreadyLogged = inv.paymentHistory?.some((h: any) => h.referenceNo === txRef);
+                  if (isAlreadyLogged) return inv;
+
+                  const nextHist = [
+                    ...(inv.paymentHistory || []),
+                    {
+                      receiptId: `REC-AUTO-${Math.floor(Math.random() * 8000) + 1000}`,
+                      date: new Date().toISOString().split('T')[0],
+                      amountPaid: paidContribution,
+                      paymentMethod: gateway === 'stripe' ? 'Card (via Stripe)' : 'Telebirr/CBE (via Chapa)',
+                      referenceNo: txRef
+                    }
+                  ];
+
+                  return {
+                    ...inv,
+                    paidAmount: nextPaid,
+                    balance: nextBal,
+                    status: nextBal <= 0 ? 'Paid' : 'Partially Paid',
+                    paymentHistory: nextHist
+                  };
+                }
+                return inv;
+              });
+            });
+
+            // Trigger visual notification
+            alert(lang === 'EN'
+              ? `🎉 Thank you! Your payment of ${amountStr || ''} ETB has been successfully verified via ${gateway === 'chapa' ? 'Chapa' : 'Stripe'}!`
+              : `🎉 እናመሰግናለን! የእርስዎ የ ${amountStr || ''} ብር ክፍያ በ ${gateway === 'chapa' ? 'Chapa' : 'Stripe'} በኩል በተሳካ ሁኔታ ተረጋግጧል!`);
+          } else {
+            alert(`Payment verification failed: ${verification.message}`);
+          }
+        } catch (e) {
+          console.error("Payment verification connection error:", e);
+        } finally {
+          // Clear query params to keep the browser clean
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
+      };
+
+      verifyPayment();
+    }
+  }, [lang]);
 
   // Global Academic States loaded in local state memory for CRUD and full dynamic feedback
   const [activeTab, setActiveTab ] = useState<'Dashboard' | 'School' | 'Users' | 'Academics' | 'Finance' | 'Reports' | 'MyInfo' | 'AdminCenter' | 'SystemGuide'>('Dashboard');
@@ -72,6 +149,24 @@ export default function App() {
   const [grades, setGrades] = useState<string[]>([
     "Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"
   ]);
+
+  const [videoCourses, setVideoCourses] = useState<any[]>(() => {
+    try {
+      const persisted = localStorage.getItem('focus-academy-video-courses');
+      return persisted ? JSON.parse(persisted) : initialVideoCourses;
+    } catch {
+      return initialVideoCourses;
+    }
+  });
+
+  const handleSetVideoCourses = (items: any[]) => {
+    setVideoCourses(items);
+    try {
+      localStorage.setItem('focus-academy-video-courses', JSON.stringify(items));
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Finance security codes & locks states
   const [bursarPasscode, setBursarPasscode] = useState("8844");
@@ -409,6 +504,8 @@ export default function App() {
               grades={grades}
               setGrades={setGrades}
               parents={parents}
+              videoCourses={videoCourses}
+              setVideoCourses={handleSetVideoCourses}
             />
           )}
 
@@ -470,6 +567,9 @@ export default function App() {
               currentStudent={currentUser.studentObj || students[0]}
               scoreRecords={scoreRecords}
               lang={lang}
+              invoices={invoices}
+              setInvoices={setInvoices}
+              videoCourses={videoCourses}
             />
           )}
 

@@ -14,7 +14,8 @@ import {
   ScoreRecord,
   FeeStructure,
   TimetableEntry,
-  AttendanceRecord
+  AttendanceRecord,
+  VideoCourse
 } from './types';
 
 export const initialSchoolProfile: SchoolProfile = {
@@ -807,6 +808,78 @@ export const initialAttendance: AttendanceRecord[] = [
       { studentId: "std-1", studentName: "Yonas Bekele", isPresent: true },
       { studentId: "std-2", studentName: "Seble Hailu", isPresent: true },
       { studentId: "std-5", studentName: "Abebe Kassa", isPresent: false, remarks: "Sick leave" }
+    ]
+  }
+];
+
+export const initialVideoCourses: VideoCourse[] = [
+  {
+    id: "math-8",
+    title: "Grade 8 Advanced Mathematics - National Exam Prep",
+    description: "Syllabus-aligned mastery course covering Algebra, Geometry, Theorems and Exam Preparation guides. High-definition lessons focusing on Ethiopian National Exam Prep.",
+    price: 350,
+    tutor: "Alemayehu Tadese (Focus STEM Department)",
+    duration: "14h 20m",
+    lessonsCount: 12,
+    subject: "Mathematics",
+    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    chapters: [
+      "Chapter 1: Rational Numbers & Arithmetic Operations",
+      "Chapter 2: Linear Equations & Inequalities",
+      "Chapter 3: Geometry & Coordinate Systems",
+      "Chapter 4: Similarity and Theorems of Trigonometry",
+      "Chapter 5: National Examination Study Mock questions"
+    ]
+  },
+  {
+    id: "science-8",
+    title: "National General Science Masterclass",
+    description: "Comprehensive focus on Physics, Biology, and Chemistry concepts for school and Ministry audits. Designed by award winning curriculum architects.",
+    price: 290,
+    tutor: "Helen Yosef (Academic Specialist)",
+    duration: "9h 45m",
+    lessonsCount: 8,
+    subject: "General Science",
+    videoUrl: "https://media.w3.org/2010/05/sintel/trailer_hd.mp4",
+    chapters: [
+      "Chapter 1: Matter in our Environment",
+      "Chapter 2: Cells - The Structural Unit of Life",
+      "Chapter 3: Force and Energy Dynamics",
+      "Chapter 4: Basic Chemical Reaction Properties"
+    ]
+  },
+  {
+    id: "english-8",
+    title: "English Language Grammar & Speaking Mastery",
+    description: "Hone writing clarity, spelling rules, direct speech, and academic literature comprehension. Meets international speaking standard recommendations.",
+    price: 220,
+    tutor: "Mulugeta Kebede",
+    duration: "6h 30m",
+    lessonsCount: 6,
+    subject: "English",
+    videoUrl: "https://www.w3schools.com/html/movie.mp4",
+    chapters: [
+      "Chapter 1: Advanced Subject-Verb Agreement",
+      "Chapter 2: Direct & Indirect Narratives",
+      "Chapter 3: Essay Writing Structure & Layout",
+      "Chapter 4: Reading Comprehension Techniques"
+    ]
+  },
+  {
+    id: "ict-8",
+    title: "Information Technology & Basic Coding Core",
+    description: "Learn computer operating systems, spreadsheets, databases and introductory Python programming. Prepares students for advanced technology topics.",
+    price: 250,
+    tutor: "Dawit Abebe (ICT Department Head)",
+    duration: "8h 15m",
+    lessonsCount: 10,
+    subject: "Information Technology",
+    videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
+    chapters: [
+      "Chapter 1: Fundamentals of Hardware & Software",
+      "Chapter 2: Master Spreadsheets for Data Entry",
+      "Chapter 3: Introduction to Relational Databases",
+      "Chapter 4: Beginning Code and Loop Constructs"
     ]
   }
 ];

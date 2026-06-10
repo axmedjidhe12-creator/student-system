@@ -30,7 +30,7 @@ import {
 } from '../lib/firebase';
 
 interface FirebaseSyncControlProps {
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
   students: Student[];
   setStudents: (students: Student[]) => void;
   teachers: Teacher[];

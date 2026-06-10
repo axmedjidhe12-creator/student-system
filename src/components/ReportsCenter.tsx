@@ -26,7 +26,7 @@ interface ReportsCenterProps {
   scoreRecords: ScoreRecord[];
   invoices: Invoice[];
   t: AppTranslations;
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
 }
 
 export default function ReportsCenter({

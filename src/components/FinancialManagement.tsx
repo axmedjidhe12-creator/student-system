@@ -27,7 +27,7 @@ interface FinancialManagementProps {
   setInvoices: (invoices: Invoice[]) => void;
   students: Student[];
   t: AppTranslations;
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
   bursarPasscode: string;
   bursarName: string;
   isFinanceLocked: boolean;

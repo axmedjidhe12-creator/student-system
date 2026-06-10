@@ -12,7 +12,8 @@ import {
   TimetableEntry, 
   AttendanceRecord,
   Teacher,
-  Parent
+  Parent,
+  VideoCourse
 } from '../types';
 import { AppTranslations } from '../translations';
 import { 
@@ -43,13 +44,15 @@ interface AcademicManagementProps {
   attendance: AttendanceRecord[];
   setAttendance: (a: AttendanceRecord[]) => void;
   t: AppTranslations;
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
   currentUser: any;
   subjects: Subject[];
   setSubjects: (subjs: Subject[]) => void;
   grades: string[];
   setGrades: (grads: string[]) => void;
   parents: Parent[];
+  videoCourses?: VideoCourse[];
+  setVideoCourses?: (courses: VideoCourse[]) => void;
 }
 
 export default function AcademicManagement({
@@ -69,10 +72,12 @@ export default function AcademicManagement({
   setSubjects,
   grades,
   setGrades,
-  parents
+  parents,
+  videoCourses = [],
+  setVideoCourses
 }: AcademicManagementProps) {
   
-  const [activeAcademicSubTab, setActiveAcademicSubTab] = useState<'Grades' | 'Exams' | 'Promotions' | 'Timetable' | 'HomeworkAlerts'>('Exams');
+  const [activeAcademicSubTab, setActiveAcademicSubTab] = useState<'Grades' | 'Exams' | 'Promotions' | 'Timetable' | 'HomeworkAlerts' | 'VideoCourses'>('Exams');
 
   // New Subject & Grade adding variables
   const [newSubName, setNewSubName] = useState("");
@@ -114,6 +119,14 @@ export default function AcademicManagement({
   ]);
   const [activeHomeworkAlert, setActiveHomeworkAlert] = useState<string | null>(null);
 
+  // Quick Subject states for easy on-the-fly subject registration
+  const [quickSubName, setQuickSubName] = useState("");
+  const [quickSubAmharic, setQuickSubAmharic] = useState("");
+  const [quickSubCode, setQuickSubCode] = useState("");
+  const [quickSubIsNational, setQuickSubIsNational] = useState(false);
+  const [showQuickSubjectModal, setShowQuickSubjectModal] = useState(false);
+  const [quickSubjectSuccessMsg, setQuickSubjectSuccessMsg] = useState("");
+
   // Exam Score creation state
   const [showAddScore, setShowAddScore] = useState(false);
   const [scStdId, setScStdId] = useState("");
@@ -123,6 +136,22 @@ export default function AcademicManagement({
   const [scPart, setScPart] = useState(8); // out of 10
   const [scMid, setScMid] = useState(16); // out of 20
   const [scFinal, setScFinal] = useState(32); // out of 40
+
+  // --- BULK BATCH GRADING SHEET SYSTEM ---
+  const [isBulkMode, setIsBulkMode] = useState(true); // Default to bulk list view for beautiful ease
+  const [bulkGrade, setBulkGrade] = useState("Grade 8");
+  const [bulkSection, setBulkSection] = useState("Section A");
+  const [bulkSubjectId, setBulkSubjectId] = useState("");
+  // Local input values for the batch list
+  const [bulkInputs, setBulkInputs] = useState<Record<string, {
+    quizzes: string;
+    assignments: string;
+    participation: string;
+    midtermScore: string;
+    finalScore: string;
+  }>>({});
+  const [bulkSuccessMsg, setBulkSuccessMsg] = useState("");
+
 
   // Promotions Configuration States
   const [promotionPassMark, setPromotionPassMark] = useState(50);
@@ -135,6 +164,23 @@ export default function AcademicManagement({
     insufficientCount: number;
     timestamp: string;
   } | null>(null);
+
+  // States for uploading video course
+  const [showAddCourse, setShowAddCourse] = useState(false);
+  const [csTitle, setCsTitle] = useState("");
+  const [csDescription, setCsDescription] = useState("");
+  const [csPrice, setCsPrice] = useState(250);
+  const [csTutor, setCsTutor] = useState(currentUser?.name || "");
+  const [csDuration, setCsDuration] = useState("8h 00m");
+  const [csLessonsCount, setCsLessonsCount] = useState(10);
+  const [csSubject, setCsSubject] = useState("");
+  const [csVideoUrl, setCsVideoUrl] = useState("https://www.w3schools.com/html/mov_bbb.mp4");
+  const [csChapters, setCsChapters] = useState<string[]>([
+    "Chapter 1: Introductory Foundations"
+  ]);
+  const [newChapterName, setNewChapterName] = useState("");
+  const [csAllowedGrades, setCsAllowedGrades] = useState<string[]>([]);
+  const [csAllowedSections, setCsAllowedSections] = useState<string[]>([]);
 
   // -------------------------------------------------------------
   // DYNAMIC RANKING & GRADING CALCULATIONS
@@ -187,6 +233,149 @@ export default function AcademicManagement({
     return filtered;
   };
 
+  const handleLoadExistingGrades = (subjectId: string, gradeLevel: string, sectionVal: string) => {
+    if (!subjectId) return;
+    const filteredStds = students.filter(s => s.grade === gradeLevel && s.section === sectionVal);
+    const newInputs: Record<string, {
+      quizzes: string;
+      assignments: string;
+      participation: string;
+      midtermScore: string;
+      finalScore: string;
+    }> = {};
+
+    filteredStds.forEach(std => {
+      const existing = scoreRecords.find(rec => rec.studentId === std.id && rec.subjectId === subjectId);
+      if (existing) {
+        newInputs[std.id] = {
+          quizzes: existing.quizzes.toString(),
+          assignments: existing.assignments.toString(),
+          participation: existing.participation.toString(),
+          midtermScore: existing.midtermScore.toString(),
+          finalScore: existing.finalScore.toString(),
+        };
+      } else {
+        newInputs[std.id] = {
+          quizzes: "",
+          assignments: "",
+          participation: "",
+          midtermScore: "",
+          finalScore: "",
+        };
+      }
+    });
+    setBulkInputs(newInputs);
+  };
+
+  const handleSaveBulkGrades = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkSubjectId) {
+      alert(lang === 'EN' ? "Please select a subject first!" : "እባኮ ሳብጀክት ይምረጡ!");
+      return;
+    }
+
+    const selectedSubObj = subjects.find(s => s.id === bulkSubjectId);
+    if (!selectedSubObj) return;
+
+    const filteredStds = students.filter(s => s.grade === bulkGrade && s.section === bulkSection);
+    
+    // Create new or update existing records
+    let updatedRecords = [...scoreRecords];
+    let saveCount = 0;
+
+    filteredStds.forEach(std => {
+      const row = bulkInputs[std.id] || { quizzes: "", assignments: "", participation: "", midtermScore: "", finalScore: "" };
+      
+      // Check if there's any value entered
+      const hasAnyChar = row.quizzes !== "" || row.assignments !== "" || row.participation !== "" || row.midtermScore !== "" || row.finalScore !== "";
+      if (!hasAnyChar) return; // skip completely blank lines
+
+      const qNum = Math.min(15, Math.max(0, Number(row.quizzes) || 0));
+      const aNum = Math.min(15, Math.max(0, Number(row.assignments) || 0));
+      const pNum = Math.min(10, Math.max(0, Number(row.participation) || 0));
+      const mNum = Math.min(20, Math.max(0, Number(row.midtermScore) || 0));
+      const fNum = Math.min(40, Math.max(0, Number(row.finalScore) || 0));
+
+      const catot = qNum + aNum + pNum;
+      const grtot = catot + mNum + fNum;
+
+      const scoreId = `scr-bulk-${std.id}-${bulkSubjectId}`;
+      const existingIndex = updatedRecords.findIndex(rec => rec.studentId === std.id && rec.subjectId === bulkSubjectId);
+
+      const newRecord: ScoreRecord = {
+        id: existingIndex >= 0 ? updatedRecords[existingIndex].id : scoreId,
+        studentId: std.id,
+        studentName: std.name,
+        grade: std.grade,
+        section: std.section,
+        subjectId: bulkSubjectId,
+        subjectName: selectedSubObj.name,
+        semester: 'Semester 1',
+        academicYear: '2026-2027',
+        quizzes: qNum,
+        assignments: aNum,
+        participation: pNum,
+        continuousAssessmentTotal: catot,
+        midtermScore: mNum,
+        finalScore: fNum,
+        grandTotal: grtot,
+        letterGrade: calculateLetterGrade(grtot)
+      };
+
+      if (existingIndex >= 0) {
+        updatedRecords[existingIndex] = newRecord;
+      } else {
+        updatedRecords.push(newRecord);
+      }
+      saveCount++;
+    });
+
+    setScoreRecords(updatedRecords);
+    setBulkSuccessMsg(
+      lang === 'EN' 
+        ? `Successfully saved and synchronized list of marks for ${saveCount} students in ${selectedSubObj.name} (${bulkGrade} - Section ${bulkSection}).` 
+        : `የ${saveCount} ተማሪዎችን የ${selectedSubObj.name} የፈተና እና የምዘና ውጤቶች በዝርዝር መዝገብ ላይ በተሳካ ሁኔታ አስገብተዋል! (${bulkGrade} - ሴክሽን ${bulkSection})`
+    );
+    setTimeout(() => setBulkSuccessMsg(""), 6000);
+  };
+
+  const handleAutoFillBulkMock = () => {
+    const filteredStds = students.filter(s => s.grade === bulkGrade && s.section === bulkSection);
+    const mockFilled: typeof bulkInputs = { ...bulkInputs };
+
+    filteredStds.forEach(std => {
+      // Generate realistic scores: Quiz (10-15), Assign (11-15), Part (7-10), Mid (12-20), Final (24-40)
+      const q = (9 + Math.floor(Math.random() * 7)).toString();     // 9 - 15
+      const a = (10 + Math.floor(Math.random() * 6)).toString();     // 10 - 15
+      const p = (6 + Math.floor(Math.random() * 5)).toString();      // 6 - 10
+      const m = (12 + Math.floor(Math.random() * 9)).toString();     // 12 - 20
+      const f = (22 + Math.floor(Math.random() * 19)).toString();    // 22 - 40
+
+      mockFilled[std.id] = {
+        quizzes: q,
+        assignments: a,
+        participation: p,
+        midtermScore: m,
+        finalScore: f,
+      };
+    });
+
+    setBulkInputs(mockFilled);
+  };
+
+  React.useEffect(() => {
+    if (bulkSubjectId) {
+      handleLoadExistingGrades(bulkSubjectId, bulkGrade, bulkSection);
+    }
+  }, [bulkSubjectId, bulkGrade, bulkSection, scoreRecords.length]);
+
+  React.useEffect(() => {
+    const available = getFilteredSubjects();
+    if (available.length > 0 && !bulkSubjectId) {
+      setBulkSubjectId(available[0].id);
+    }
+  }, [subjects, currentUser, bulkSubjectId]);
+
   const handleAddScoreSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!scStdId || !scSubId) return;
@@ -220,6 +409,46 @@ export default function AcademicManagement({
 
     setScoreRecords([...scoreRecords, newScore]);
     setShowAddScore(false);
+  };
+
+  const handleQuickRegisterSubject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickSubName || !quickSubCode) {
+      alert(lang === 'EN' ? "Please enter Subject Name and Code" : "እባክዎ የትምህርት ኮድና ስም ያስገቡ");
+      return;
+    }
+    const isDup = subjects.some(s => s.code.toLowerCase() === quickSubCode.toLowerCase());
+    if (isDup) {
+      alert(lang === 'EN' ? "Subject code already exists!" : "የትምህርት ኮድ ቀድሞውኑ ተመዝግቧል!");
+      return;
+    }
+    const newSubject: Subject = {
+      id: `sub-${quickSubCode.toLowerCase()}-${Date.now()}`,
+      name: quickSubName,
+      nameAmharic: quickSubAmharic || quickSubName,
+      code: quickSubCode.toUpperCase(),
+      gradeLevels: ["Grade 1", "Grade 2", "Grade 3", "Grade 4", "Grade 5", "Grade 6", "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12"],
+      isNationalExamSubject: quickSubIsNational
+    };
+    
+    setSubjects([...subjects, newSubject]);
+    
+    // Auto-select in selectors
+    setScSubId(newSubject.id);
+    setHwSubjectId(newSubject.id);
+    
+    // Notify success
+    setQuickSubjectSuccessMsg(lang === 'EN' ? `Successfully registered subject "${quickSubName}"!` : `ትምህርት "${quickSubName}" በተሳካ ሁኔታ ተመዝግቧል!`);
+    
+    // Clear & close after 1.5 seconds
+    setQuickSubName("");
+    setQuickSubAmharic("");
+    setQuickSubCode("");
+    setQuickSubIsNational(false);
+    setTimeout(() => {
+      setQuickSubjectSuccessMsg("");
+      setShowQuickSubjectModal(false);
+    }, 1500);
   };
 
   // Helper: calculate dynamically class aggregates and relative standing ranks
@@ -368,6 +597,63 @@ export default function AcademicManagement({
     });
   };
 
+  const handleAddCourseSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!csTitle || !csSubject) {
+      alert(lang === 'EN' ? "Please fill title and select subject" : "እባክዎ ርዕስ እና የትምህርት አይነት ይምረጡ");
+      return;
+    }
+
+    const newCourse: VideoCourse = {
+      id: `course-${Date.now()}`,
+      title: csTitle,
+      description: csDescription,
+      price: Number(csPrice) || 0,
+      tutor: csTutor || currentUser?.name || "Academic Tutor",
+      duration: csDuration,
+      lessonsCount: csChapters.length || csLessonsCount,
+      subject: csSubject,
+      videoUrl: csVideoUrl || "https://www.w3schools.com/html/mov_bbb.mp4",
+      chapters: csChapters.length > 0 ? csChapters : ["Chapter 1: Foundations Class"],
+      allowedGrades: csAllowedGrades.length > 0 ? csAllowedGrades : undefined,
+      allowedSections: csAllowedSections.length > 0 ? csAllowedSections : undefined
+    };
+
+    if (setVideoCourses) {
+      setVideoCourses([newCourse, ...videoCourses]);
+    }
+    
+    // reset states
+    setCsTitle("");
+    setCsDescription("");
+    setCsPrice(250);
+    setCsDuration("8h 00m");
+    setCsLessonsCount(10);
+    setCsSubject("");
+    setCsChapters(["Chapter 1: Introductory Foundations"]);
+    setCsAllowedGrades([]);
+    setCsAllowedSections([]);
+    setShowAddCourse(false);
+
+    alert(lang === 'EN' 
+      ? `🎉 Video course "${newCourse.title}" successfully uploaded and published to the Student Portal Interactive Academy!` 
+      : `🎉 የቪዲዮ ትምህርት "${newCourse.title}" በተሳካ ሁኔታ ተጭኖ ወደ ተማሪዎች ገጽ ተልኳል!`);
+  };
+
+  const handleAddChapter = () => {
+    if (!newChapterName.trim()) return;
+    setCsChapters([...csChapters, newChapterName.trim()]);
+    setNewChapterName("");
+  };
+
+  const handleDeleteCourse = (id: string) => {
+    if (confirm(lang === 'EN' ? "Are you sure you want to delete this course from the academy catalog?" : "እርግጠኛ ነዎት ይህንን የቪዲዮ ትምህርት መሰረዝ ይፈልጋሉ?")) {
+      if (setVideoCourses) {
+        setVideoCourses(videoCourses.filter((c: any) => c.id !== id));
+      }
+    }
+  };
+
   return (
     <div className="space-y-6">
       
@@ -378,7 +664,8 @@ export default function AcademicManagement({
           { id: 'Promotions', label: t.promotionSystem, icon: <UserPlus size={15} /> },
           { id: 'Grades', label: lang === 'EN' ? "Grades & Subjects" : "ክፍሎች እና ሳብጀክቶች", icon: <BookOpen size={15} /> },
           { id: 'Timetable', label: lang === 'EN' ? "Attendance Register" : "አቅርቦትና ሰሌዳ", icon: <CalendarDays size={15} /> },
-          { id: 'HomeworkAlerts', label: lang === 'EN' ? "Homework Alerts" : "የቤት ስራ ሪፖርቶች", icon: <Bell size={15} /> }
+          { id: 'HomeworkAlerts', label: lang === 'EN' ? "Homework Alerts" : "የቤት ስራ ሪፖርቶች", icon: <Bell size={15} /> },
+          { id: 'VideoCourses', label: lang === 'EN' ? "Academy Video Courses" : "Aqoonta Fiidiyowga", icon: <Sparkles size={15} /> }
         ].map((subTab) => (
           <button
             key={subTab.id}
@@ -420,8 +707,318 @@ export default function AcademicManagement({
               </button>
             </div>
 
-            {/* Form for recording score */}
-            {showAddScore && (
+            {/* View Mode Switching Tabs */}
+            <div className="flex bg-slate-900/90 p-1 rounded-xl mb-6 max-w-sm sm:max-w-md border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsBulkMode(false)}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer text-center ${
+                  !isBulkMode 
+                    ? 'bg-amber-600 text-white shadow-xs' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                {lang === 'EN' ? "Single Student Entry" : "የነጠላ ተማሪ ውጤት"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsBulkMode(true)}
+                className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center justify-center gap-1.5 relative ${
+                  isBulkMode 
+                    ? 'bg-amber-600 text-white shadow-xs' 
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block"></div>
+                <FileSpreadsheet size={13} />
+                {lang === 'EN' ? "Grade Sheet List (Liisto)" : "የውጤት መዝገብ ዝርዝር (ሊስቶ)"}
+              </button>
+            </div>
+
+            {isBulkMode ? (
+              <div className="mb-8 p-5 bg-slate-900/45 border border-slate-800 rounded-xl space-y-5 animate-fade-in text-left">
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 border-b border-slate-805 pb-4">
+                  <div className="space-y-1 text-left">
+                    <h3 className="text-sm font-bold text-amber-500 flex items-center gap-1.5">
+                      <FileSpreadsheet size={16} />
+                      {lang === 'EN' ? "Continuous Assessment Grade List (Liistada Buundooyinka)" : "የተማሪዎች ውጤት ማስገቢያ ዝርዝር መዝገብ (ሊስቶ)"}
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      {lang === 'EN' 
+                        ? "Select a class grade, section, and subject. Then quickly record scores for all matching pupils in a single document sheet."
+                        : "ክፍል፣ ሳብጀክትና ሴክሽን ይምረጡ። በመቀጠል ለክፍሉ ተማሪዎች በሙሉ ውጤታቸውን በአንድ ጊዜ ያስገቡ።"}
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleAutoFillBulkMock}
+                      className="px-3 py-1.5 bg-slate-800 hover:bg-slate-750 text-amber-400 border border-slate-700/80 text-[10px] font-bold rounded-lg cursor-pointer transition-all flex items-center gap-1"
+                      title="Generates random realistic marks for quick demonstration purposes."
+                    >
+                      <Sparkles size={11} />
+                      {lang === 'EN' ? "Auto Fill Mock Marks" : "የሙከራ ውጤት በራስ-ሰር ሙላ"}
+                    </button>
+                  </div>
+                </div>
+
+                {bulkSuccessMsg && (
+                  <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs rounded-xl font-medium animate-bounce flex items-center gap-2">
+                    <CheckCircle2 size={14} className="shrink-0" />
+                    <span>{bulkSuccessMsg}</span>
+                  </div>
+                )}
+
+                {/* Filters Row */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">
+                      {lang === 'EN' ? "1. Class Grade Level" : "1. ክፍል / ደረጃ"}
+                    </label>
+                    <select
+                      value={bulkGrade}
+                      onChange={(e) => setBulkGrade(e.target.value)}
+                      className="w-full bg-[#16181D] border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white outline-hidden focus:border-amber-600 appearance-none cursor-pointer"
+                    >
+                      {grades.map(g => (
+                        <option key={g} value={g} className="bg-[#16181D]">{g}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">
+                      {lang === 'EN' ? "2. Division Section" : "2. ሴክሽን / ክፍል"}
+                    </label>
+                    <select
+                      value={bulkSection}
+                      onChange={(e) => setBulkSection(e.target.value)}
+                      className="w-full bg-[#16181D] border border-[#2b2f3a] rounded-lg px-2.5 py-1.5 text-xs text-white outline-hidden focus:border-amber-600 appearance-none cursor-pointer"
+                    >
+                      <option value="A" className="bg-[#16181D]">Section A</option>
+                      <option value="B" className="bg-[#16181D]">Section B</option>
+                      <option value="C" className="bg-[#16181D]">Section C</option>
+                      <option value="D" className="bg-[#16181D]">Section D</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] text-slate-400 font-bold uppercase mb-1">
+                      {lang === 'EN' ? "3. Subject Course" : "3. ትምህርት / ሳብጀክት"}
+                    </label>
+                    <select
+                      value={bulkSubjectId}
+                      onChange={(e) => setBulkSubjectId(e.target.value)}
+                      className="w-full bg-[#16181D] border border-[#2b2f3a] rounded-lg px-2.5 py-1.5 text-xs text-white outline-hidden focus:border-amber-600 appearance-none cursor-pointer"
+                    >
+                      <option value="" className="bg-[#16181D]">-- Select subject --</option>
+                      {getFilteredSubjects().map(sub => (
+                        <option key={sub.id} value={sub.id} className="bg-[#16181D]">{sub.name} ({sub.code})</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Spreadsheet Table for Matching Pupils */}
+                <div>
+                  {(() => {
+                    const matchedPupils = students.filter(s => s.grade === bulkGrade && s.section === bulkSection);
+                    
+                    if (matchedPupils.length === 0) {
+                      return (
+                        <div className="p-8 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl space-y-1 bg-slate-900/20">
+                          <p className="font-bold text-slate-400">
+                            {lang === 'EN' ? "No Students Registered in this grade + section." : "በዚህ ክፍልና ሴክሽን የተመዘገቡ ተማሪዎች አልተገኙም።"}
+                          </p>
+                          <p className="text-[10px] text-slate-600">
+                            {lang === 'EN' ? "Choose another grade level or register new students first in the directory." : "እባክዎ ሌላ ክፍል ይምረጡ ወይንም መጀመሪያ ተማሪዎችን ይመዝግቡ።"}
+                          </p>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <form onSubmit={handleSaveBulkGrades} className="space-y-4 text-left">
+                        <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#0c0d10]/40 max-h-[480px]">
+                          <table className="w-full border-collapse text-left">
+                            <thead className="bg-[#0c0d10] text-[10px] font-bold text-slate-500 border-b border-slate-850 uppercase tracking-wider sticky top-0 z-10">
+                              <tr>
+                                <th className="p-3 pl-4 min-w-[155px] text-left">{t.student}</th>
+                                <th className="p-2 text-center w-[90px]">{lang === 'EN' ? "Quiz (15)" : "ፈተና (15)"}</th>
+                                <th className="p-2 text-center w-[90px]">{lang === 'EN' ? "Assign (15)" : "የቤት ስራ (15)"}</th>
+                                <th className="p-2 text-center w-[90px]">{lang === 'EN' ? "Partic. (10)" : "ተሳትፎ (10)"}</th>
+                                <th className="p-2 text-center w-[90px]">{lang === 'EN' ? "Mid (20)" : "ግማሽ (20)"}</th>
+                                <th className="p-2 text-center w-[90px]">{lang === 'EN' ? "Final (40)" : "መጨረሻ (40)"}</th>
+                                <th className="p-3 pr-4 text-center w-[110px]">{lang === 'EN' ? "Result preview" : "ድምር ውጤት"}</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-850/60 text-xs text-slate-350">
+                              {matchedPupils.map((pupid, index) => {
+                                const row = bulkInputs[pupid.id] || { quizzes: "", assignments: "", participation: "", midtermScore: "", finalScore: "" };
+                                
+                                const qVal = Number(row.quizzes) || 0;
+                                const aVal = Number(row.assignments) || 0;
+                                const pVal = Number(row.participation) || 0;
+                                const mVal = Number(row.midtermScore) || 0;
+                                const fVal = Number(row.finalScore) || 0;
+                                const sumVal = qVal + aVal + pVal + mVal + fVal;
+                                const previewLtr = calculateLetterGrade(sumVal);
+
+                                const hasFocus = row.quizzes !== "" || row.assignments !== "" || row.participation !== "" || row.midtermScore !== "" || row.finalScore !== "";
+
+                                return (
+                                  <tr 
+                                    key={pupid.id} 
+                                    className={`transition-colors text-left ${index % 2 === 0 ? 'bg-slate-900/10' : 'bg-transparent'} ${hasFocus ? 'border-l-2 border-amber-500 bg-amber-500/[0.01]' : ''}`}
+                                  >
+                                    {/* Student Name */}
+                                    <td className="p-3 pl-4 text-left">
+                                      <div className="font-semibold text-slate-200">{pupid.name}</div>
+                                      <div className="text-[9px] text-slate-500 font-mono">ID: {pupid.id}</div>
+                                    </td>
+
+                                    {/* Quiz 15% */}
+                                    <td className="p-2">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={15}
+                                        placeholder="0 - 15"
+                                        value={row.quizzes}
+                                        onChange={(e) => {
+                                          setBulkInputs({
+                                            ...bulkInputs,
+                                            [pupid.id]: { ...row, quizzes: e.target.value }
+                                          });
+                                        }}
+                                        className="w-full bg-[#16181D] border border-slate-800 rounded-lg py-1 px-2 text-center text-xs text-white font-mono focus:border-amber-500 outline-hidden hover:border-slate-700"
+                                      />
+                                    </td>
+
+                                    {/* Assignments 15% */}
+                                    <td className="p-2">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={15}
+                                        placeholder="0 - 15"
+                                        value={row.assignments}
+                                        onChange={(e) => {
+                                          setBulkInputs({
+                                            ...bulkInputs,
+                                            [pupid.id]: { ...row, assignments: e.target.value }
+                                          });
+                                        }}
+                                        className="w-full bg-[#16181D] border border-slate-800 rounded-lg py-1 px-2 text-center text-xs text-white font-mono focus:border-amber-500 outline-hidden hover:border-slate-700"
+                                      />
+                                    </td>
+
+                                    {/* Participation 10% */}
+                                    <td className="p-2">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={10}
+                                        placeholder="0 - 10"
+                                        value={row.participation}
+                                        onChange={(e) => {
+                                          setBulkInputs({
+                                            ...bulkInputs,
+                                            [pupid.id]: { ...row, participation: e.target.value }
+                                          });
+                                        }}
+                                        className="w-full bg-[#16181D] border border-slate-800 rounded-lg py-1 px-2 text-center text-xs text-white font-mono focus:border-amber-500 outline-hidden hover:border-slate-700"
+                                      />
+                                    </td>
+
+                                    {/* Midterm 20% */}
+                                    <td className="p-2">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={20}
+                                        placeholder="0 - 20"
+                                        value={row.midtermScore}
+                                        onChange={(e) => {
+                                          setBulkInputs({
+                                            ...bulkInputs,
+                                            [pupid.id]: { ...row, midtermScore: e.target.value }
+                                          });
+                                        }}
+                                        className="w-full bg-[#16181D] border border-slate-800 rounded-lg py-1 px-2 text-center text-xs text-white font-mono focus:border-amber-500 outline-hidden hover:border-slate-700"
+                                      />
+                                    </td>
+
+                                    {/* Final Exam 40% */}
+                                    <td className="p-2">
+                                      <input
+                                        type="number"
+                                        min={0}
+                                        max={40}
+                                        placeholder="0 - 40"
+                                        value={row.finalScore}
+                                        onChange={(e) => {
+                                          setBulkInputs({
+                                            ...bulkInputs,
+                                            [pupid.id]: { ...row, finalScore: e.target.value }
+                                          });
+                                        }}
+                                        className="w-full bg-[#16181D] border border-slate-800 rounded-lg py-1 px-2 text-center text-xs text-white font-mono focus:border-amber-500 outline-hidden hover:border-slate-700"
+                                      />
+                                    </td>
+
+                                    {/* Dynamic Total Preview & Live Grade Badge */}
+                                    <td className="p-3 pr-4 text-center">
+                                      <div className="flex flex-col items-center justify-center gap-1">
+                                        <span className={`text-xs font-bold font-mono ${sumVal >= 50 ? 'text-emerald-450' : 'text-rose-400'}`}>
+                                          {sumVal} <span className="text-[10px] text-slate-500 font-normal">/100</span>
+                                        </span>
+                                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold text-center border ${
+                                          previewLtr.startsWith('A')
+                                            ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                                            : previewLtr.startsWith('B')
+                                              ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
+                                              : previewLtr === 'F'
+                                                ? 'bg-rose-500/10 text-rose-400 border-rose-500/25 font-black'
+                                                : 'bg-amber-600/15 text-amber-500 border-amber-600/25'
+                                        }`}>
+                                          {previewLtr}
+                                        </span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {/* Save Button */}
+                        <div className="flex justify-end pt-3">
+                          <button
+                            type="submit"
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs py-2.5 px-6 rounded-xl flex items-center gap-2 transition-all cursor-pointer shadow-md border border-emerald-500/20 active:scale-95"
+                          >
+                            <CheckCircle2 size={14} />
+                            {lang === 'EN' ? "Save & Sync Active Grade List" : "ውጤቱን በሙሉ መዝግብ (አስቀምጥ)"}
+                          </button>
+                        </div>
+                      </form>
+                    );
+                  })()}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="flex justify-between items-center mb-4">
+                  <span className="text-xs text-slate-400 font-medium">
+                    {lang === "EN" ? "Record individual grades for specific pupils one record at a time." : "የአንድን ተማሪ ውጤት ለብቻ ለመመዝገብ ከዚህ በታች ይጠቀሙ።"}
+                  </span>
+                </div>
+
+                {/* Form for recording score */}
+                {showAddScore && (
               <form onSubmit={handleAddScoreSubmit} className="mb-6 p-5 bg-slate-900/60 border border-slate-800 rounded-xl space-y-4 max-w-2xl animate-fade-in">
                 <h3 className="text-xs font-bold text-slate-450 uppercase tracking-widest">{lang === 'EN' ? "Log New Academic Performance Mark" : "የተማሪ አዲስ ውጤት ማስገቢያ ቅፅ"}</h3>
                 
@@ -442,7 +1039,16 @@ export default function AcademicManagement({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-400 mb-1">{t.subject} *</label>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="block text-[11px] font-semibold text-slate-400">{t.subject} *</label>
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickSubjectModal(true)}
+                        className="text-[10px] text-amber-500 hover:text-amber-400 font-bold flex items-center gap-0.5 cursor-pointer"
+                      >
+                        <Plus size={11} /> {lang==='EN' ? "Add Subject" : lang==='SO' ? "Kordhi Maaddo" : 'ሳብጀክት ጨምር'}
+                      </button>
+                    </div>
                     <select 
                       value={scSubId} 
                       required 
@@ -531,6 +1137,9 @@ export default function AcademicManagement({
                   </button>
                 </div>
               </form>
+            )}
+
+              </div>
             )}
 
             {/* Scores Table */}
@@ -1081,16 +1690,16 @@ export default function AcademicManagement({
               <div>
                 <h2 className="font-display font-medium text-white text-base mb-1">{lang === 'EN' ? "Subjects & National Standard Register" : "የሳብጀክቶች እና የትምህርት ኮዶች ዝርዝር መግለጫ"}</h2>
                 <p className="text-xs text-slate-500">
-                  {lang === 'EN' ? "Map educational fields and configure standard Ministry leave indicators." : "የትምህርት ክፍሎችን ይዘርዝሩ እንዲሁም የፈተና መለኪያዎችን ያስገቡ።"}
+                  {lang === 'EN' ? "Map educational fields and configure standard Ministry leave indicators." : "Deji qaybaha waxbarashada iyo tilmaamayaasha heerarka wasaaradda."}
                 </p>
               </div>
 
               {/* Subject Register Addition Form */}
               <form onSubmit={handleCreateSubject} className="p-4 bg-slate-900 border border-slate-805 rounded-xl space-y-3">
-                <h3 className="text-xs font-bold text-slate-200 tracking-wide">{lang === 'EN' ? "Add Custom Syllabus Subject" : "አዲስ የትምህርት አይነት መመዝገቢያ"}</h3>
-                <div className="grid grid-cols-2 gap-3">
+                <h3 className="text-xs font-bold text-slate-200 tracking-wide">{lang === 'EN' ? "Add Custom Syllabus Subject" : "Ku dar Maaddada Cusub"}</h3>
+                <div className="grid grid-cols-1 gap-3">
                   <div>
-                    <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">{lang === 'EN' ? "Subject Title (EN)" : "የትምህርት ስም (እንግሊዝኛ)"}</label>
+                    <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">{lang === 'EN' ? "Subject Title" : "Magaca Maaddada"}</label>
                     <input 
                       type="text" 
                       placeholder="e.g. Science"
@@ -1099,21 +1708,11 @@ export default function AcademicManagement({
                       className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3 py-2 rounded-lg text-white placeholder-slate-600 focus:border-amber-600/40 outline-hidden"
                     />
                   </div>
-                  <div>
-                    <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">{lang === 'EN' ? "Subject Title (AM)" : "የትምህርቱ ስም (አማርኛ)"}</label>
-                    <input 
-                      type="text" 
-                      placeholder="ምሳሌ: ሳይንስ"
-                      value={newSubAmharic}
-                      onChange={(e) => setNewSubAmharic(e.target.value)}
-                      className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3 py-2 rounded-lg text-white placeholder-slate-600 focus:border-amber-600/40 outline-hidden"
-                    />
-                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">{lang === 'EN' ? "Standard Code" : "የትምህርት ኮድ"}</label>
+                    <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">{lang === 'EN' ? "Standard Code" : "Koodhka Maaddada"}</label>
                     <input 
                       type="text" 
                       placeholder="e.g. SCI"
@@ -1341,7 +1940,16 @@ export default function AcademicManagement({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">{lang === 'EN' ? "2. Target Subject Matter" : "2. የትምህርት አይነት"}</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[10px] text-slate-500 uppercase font-semibold">{lang === 'EN' ? "2. Target Subject Matter" : "2. የትምህርት አይነት"}</label>
+                    <button
+                      type="button"
+                      onClick={() => setShowQuickSubjectModal(true)}
+                      className="text-[10px] text-amber-500 hover:text-amber-400 font-bold flex items-center gap-0.5 cursor-pointer"
+                    >
+                      <Plus size={11} /> {lang==='EN' ? "Add Subject" : lang==='SO' ? "Kordhi Maaddo" : 'ሳብጀክት ጨምር'}
+                    </button>
+                  </div>
                   <select
                     value={hwSubjectId}
                     onChange={(e) => hwSubjectId === "" ? setHwSubjectId(e.target.value) : setHwSubjectId(e.target.value)}
@@ -1461,6 +2069,535 @@ export default function AcademicManagement({
           </div>
         );
       })()}
+
+      {activeAcademicSubTab === 'VideoCourses' && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Header summary panel */}
+          <div className="bg-[#16181D] border border-slate-805 p-6 rounded-3xl flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-1">
+              <span className="text-[10px] bg-amber-600/10 text-amber-500 font-mono font-bold tracking-widest uppercase px-2 py-0.5 rounded border border-amber-600/20 font-semibold">
+                {lang === 'EN' ? "Interactive Academy Catalog" : "የቪዲዮ ትምህርት ቤት ማውጫ"}
+              </span>
+              <h2 className="font-display font-medium text-white text-lg font-bold">
+                {lang === 'EN' ? "Teacher-Created Video Syllabus Management" : "የቪዲዮ ማስተማሪያ ኮርሶች መቆጣጠሪያ"}
+              </h2>
+              <p className="text-xs text-slate-400">
+                {lang === 'EN' 
+                  ? "Publish professional video lessons, build custom chapter lists, and set ETB pricing for direct student purchase." 
+                  : "ሙያዊ የማስተማሪያ ቪዲዮዎችን ይጫኑ፣ የየክፍሉን አርዕስት ያደራጁ፣ እና ተማሪዎች ገዝተው የሚማሩበትን ዋጋ ይወስኑ።"}
+              </p>
+            </div>
+            
+            <button
+              onClick={() => setShowAddCourse(!showAddCourse)}
+              className="py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 shadow-sm hover:scale-[1.02] active:scale-95 transition-all cursor-pointer select-none"
+            >
+              <Plus size={15} />
+              {showAddCourse 
+                ? (lang === 'EN' ? "Close Form" : "ፎርሙን ዝጋ") 
+                : (lang === 'EN' ? "Publish Video Course" : "አዲስ የቪዲዮ ትምህርት ጫን")}
+            </button>
+          </div>
+
+          {/* COURSE UPLOADING FORM */}
+          {showAddCourse && (
+            <form onSubmit={handleAddCourseSubmit} className="bg-[#16181D] border border-slate-805 rounded-3xl p-6 space-y-6 max-w-3xl text-left">
+              <div>
+                <h3 className="font-display font-medium text-white text-sm mb-1 font-bold">
+                  {lang === 'EN' ? "Publish New Interactive Syllabus Course" : "አዲስ የቪዲዮ ኮርስ መረጃ መሙያ"}
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  {lang === 'EN' 
+                    ? "Fill in correct details below to instantly make this syllabus available to all students." 
+                    : "ከዚህ በታች ሙሉ መረጃዎችን በመሙላት ኮርሱን ለሁሉም ተማሪዎች እንዲደርስ ማድረግ ይችላሉ።"}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Title */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">
+                    {lang === 'EN' ? "Course Title *" : "የኮርሱ ርዕስ *"}
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. Grade 8 Physics - Forces and Thermodynamics"
+                    value={csTitle}
+                    onChange={(e) => setCsTitle(e.target.value)}
+                    className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white outline-hidden focus:border-amber-500/50"
+                  />
+                </div>
+
+                {/* Subject Selection */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">
+                    {lang === 'EN' ? "Subject matter category *" : "የትምህርት አይነት *"}
+                  </label>
+                  <select
+                    required
+                    value={csSubject}
+                    onChange={(e) => setCsSubject(e.target.value)}
+                    className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white outline-hidden focus:border-amber-500/50 cursor-pointer"
+                  >
+                    <option value="">-- Choose Subject --</option>
+                    {subjects.map(s => (
+                      <option key={s.id} value={s.name}>{s.name} ({s.code})</option>
+                    ))}
+                    <option value="Mathematics">Mathematics</option>
+                    <option value="Physics">Physics</option>
+                    <option value="Biology">Biology</option>
+                    <option value="Chemistry">Chemistry</option>
+                    <option value="General Science">General Science</option>
+                    <option value="English">English</option>
+                    <option value="Information Technology">Information Technology</option>
+                  </select>
+                </div>
+
+                {/* Description */}
+                <div className="md:col-span-2">
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">
+                    {lang === 'EN' ? "Detailed Course Description" : "የኮርሱ ዝርዝር ማብራሪያ"}
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Provide description regarding the curriculum standards and topics that will unlock with this purchase..."
+                    value={csDescription}
+                    onChange={(e) => setCsDescription(e.target.value)}
+                    className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white outline-hidden focus:border-amber-500/50 resize-none font-sans"
+                  />
+                </div>
+
+                {/* Price (ETB) */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">
+                    {lang === 'EN' ? "Enrollment Price (ETB) *" : "የመመዝገቢያ ዋጋ (ብር) *"}
+                  </label>
+                  <input 
+                    type="number" 
+                    required
+                    min={0}
+                    placeholder="e.g. 250"
+                    value={csPrice}
+                    onChange={(e) => setCsPrice(Number(e.target.value) || 0)}
+                    className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white outline-hidden focus:border-amber-500/50 font-mono"
+                  />
+                </div>
+
+                {/* Tutor */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">
+                    {lang === 'EN' ? "Assigned Course Tutor *" : "ኮርሱን የሚያስተምረው መምህር *"}
+                  </label>
+                  <input 
+                    type="text" 
+                    required
+                    placeholder="e.g. Alemayehu Tadese"
+                    value={csTutor}
+                    onChange={(e) => setCsTutor(e.target.value)}
+                    className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white outline-hidden focus:border-amber-500/50"
+                  />
+                </div>
+
+                {/* Duration */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">
+                    {lang === 'EN' ? "Total Course Duration (e.g. 10h 30m)" : "አጠቃላይ ሰአት (ምሳሌ፡ 10h 30m)"}
+                  </label>
+                  <input 
+                    type="text" 
+                    placeholder="e.g. 11h 15m"
+                    value={csDuration}
+                    onChange={(e) => setCsDuration(e.target.value)}
+                    className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white outline-hidden focus:border-amber-500/50"
+                  />
+                </div>
+
+                {/* Video URL */}
+                <div>
+                  <label className="block text-[10px] text-slate-400 uppercase font-semibold mb-1">
+                    {lang === 'EN' ? "High Quality Video Resource Link (MP4 format) *" : "የማስተማሪያ ቪዲዮ ሊንክ (MP4 ፎርማት) *"}
+                  </label>
+                  <input 
+                    type="url" 
+                    required
+                    placeholder="e.g. https://www.w3schools.com/html/mov_bbb.mp4"
+                    value={csVideoUrl}
+                    onChange={(e) => setCsVideoUrl(e.target.value)}
+                    className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white outline-hidden focus:border-amber-500/50 font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* TARGET CLASSES / DETERMINED ACCESS RIGHTS */}
+              <div className="bg-[#0A0B0E] p-4 rounded-2xl border border-slate-805 space-y-3 font-sans">
+                <div>
+                  <label className="block text-[10px] text-amber-500 uppercase font-bold tracking-wider mb-0.5">
+                    {lang === 'EN' ? "Determine Target Student Classes (Access Rights)" : "የቪዲዮው ተመልካች ክፍሎች መወሰኛ"}
+                  </label>
+                  <p className="text-[10px] text-slate-500">
+                    {lang === 'EN' 
+                      ? "Check the specific student grades and division sections allowed to view/study this syllabus. Leave empty to publish to all classes." 
+                      : "ይህንን የማስተማሪያ ቪዲዮ ማየት የሚችሉ የተማሪ ክፍሎችን እና ሴክሽኖችን ይምረጡ። ካልመረጡ ለሁሉም ክፍሎች ግልፅ ይሆናል።"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {/* Select Grades */}
+                  <div>
+                    <span className="block text-[9.5px] text-slate-400 font-bold mb-1.5 uppercase">
+                      {lang === 'EN' ? "Allowed Grade Levels" : "የተፈቀዱ የክፍል ደረጃዎች"}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {grades.map((g) => {
+                        const isChecked = csAllowedGrades.includes(g);
+                        return (
+                          <button
+                            key={g}
+                            type="button"
+                            onClick={() => {
+                              if (isChecked) {
+                                setCsAllowedGrades(csAllowedGrades.filter(x => x !== g));
+                              } else {
+                                setCsAllowedGrades([...csAllowedGrades, g]);
+                              }
+                            }}
+                            className={`px-3 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                              isChecked
+                                ? "bg-amber-600 border-amber-500 text-white shadow-xs"
+                                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300"
+                            }`}
+                          >
+                            {g}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Select Sections */}
+                  <div>
+                    <span className="block text-[9.5px] text-slate-400 font-bold mb-1.5 uppercase">
+                      {lang === 'EN' ? "Allowed Sections" : "የተፈቀዱ ሴክሽኖች"}
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {["A", "B", "C", "D"].map((sec) => {
+                        const isChecked = csAllowedSections.includes(sec);
+                        return (
+                          <button
+                            key={sec}
+                            type="button"
+                            onClick={() => {
+                              if (isChecked) {
+                                setCsAllowedSections(csAllowedSections.filter(x => x !== sec));
+                              } else {
+                                setCsAllowedSections([...csAllowedSections, sec]);
+                              }
+                            }}
+                            className={`px-3 py-1 text-[10px] font-bold rounded-lg border transition-all cursor-pointer ${
+                              isChecked
+                                ? "bg-indigo-600 border-indigo-500 text-white shadow-xs"
+                                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300"
+                            }`}
+                          >
+                            Section {sec}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* CHAPTER CURRICULUM BUILDER */}
+              <div className="bg-[#0A0B0E] p-4 rounded-2xl border border-slate-805 space-y-3 font-sans">
+                <div>
+                  <label className="block text-[10px] text-amber-500 uppercase font-bold tracking-wider mb-0.5">
+                    {lang === 'EN' ? "Interactive Chapter Curriculum Builder" : "የትምህርት ክፍሎች ዝርዝር ማደራጃ"}
+                  </label>
+                  <p className="text-[10px] text-slate-500">
+                    {lang === 'EN' 
+                      ? "Add individual chapter topics that students will cover chronologically during lesson play." 
+                      : "ተማሪዎች ደረጃ በደረጃ የሚማሩበትን የየክፍሉን አርዕስት ከታች ይጨምሩ።"}
+                  </p>
+                </div>
+
+                <div className="flex gap-2">
+                  <input 
+                    type="text" 
+                    placeholder="e.g. Chapter 3: Electromagnetic Flux Theory"
+                    value={newChapterName}
+                    onChange={(e) => setNewChapterName(e.target.value)}
+                    className="flex-1 bg-[#111318] border border-slate-800 text-xs px-3.5 py-2 rounded-xl text-white outline-hidden focus:border-amber-505"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddChapter}
+                    className="py-2 px-4 bg-[#16181D] hover:bg-slate-800 border border-slate-800 text-slate-200 hover:text-white text-xs font-bold rounded-xl cursor-pointer transition-all active:scale-95 select-none"
+                  >
+                    {lang === 'EN' ? "Add Chapter" : "ክፍል ጨምር"}
+                  </button>
+                </div>
+
+                <div className="space-y-1.5 pt-1">
+                  {csChapters.map((ch, idx) => (
+                    <div key={idx} className="flex justify-between items-center bg-[#111318]/70 border border-slate-850 px-3 py-2 rounded-xl text-xs text-slate-300">
+                      <span className="font-mono text-slate-500 text-[10px] select-none font-bold mr-2">#{idx + 1}</span>
+                      <span className="flex-1 font-semibold text-slate-300">{ch}</span>
+                      <button
+                        type="button"
+                        onClick={() => setCsChapters(csChapters.filter((_, i) => i !== idx))}
+                        className="text-slate-500 hover:text-red-400 font-bold px-1 select-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+
+                  {csChapters.length === 0 && (
+                    <p className="text-[10px] text-slate-650 italic">No chapters defined. Add at least one chapter to build the timeline index.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Form Actions */}
+              <div className="flex gap-3 pt-3 border-t border-slate-805">
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl cursor-pointer transition-all active:scale-95 shadow-sm"
+                >
+                  {lang === 'EN' ? "Save & Publish Video Course to Academy" : "የቪዲዮ ኮርሱን መዝግብ እና አሳትም"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAddCourse(false)}
+                  className="py-2.5 px-5 bg-slate-900 hover:bg-slate-850 text-slate-450 font-bold text-xs rounded-xl cursor-pointer border border-slate-800"
+                >
+                  {lang === 'EN' ? "Cancel" : "አልፈልግም"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* CATALOG OF EXISTING CHANNELS */}
+          <div className="space-y-4">
+            <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-widest px-1">
+              {lang === 'EN' ? "Active Video Courses Catalog" : "የተመዘገቡ የቪዲዮ ኮርሶች ማውጫ"}
+            </h3>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {videoCourses.map((course) => (
+                <div 
+                  key={course.id} 
+                  className="bg-[#16181D] border border-slate-805 rounded-2xl p-5 flex flex-col justify-between hover:border-slate-700 transition-all shadow-md group relative overflow-hidden text-left"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <span className="text-[9px] bg-indigo-600/10 text-indigo-400 font-mono font-bold px-2 py-0.5 rounded border border-indigo-600/15 uppercase tracking-wider">
+                          {course.subject}
+                        </span>
+                        <h4 className="text-sm font-bold text-slate-100 group-hover:text-amber-500 transition-colors">
+                          {course.title}
+                        </h4>
+                      </div>
+
+                      <p className="text-base font-bold font-mono text-emerald-400 shrink-0">
+                        {course.price === 0 ? "FREE" : `${course.price} ETB`}
+                      </p>
+                    </div>
+
+                    <p className="text-xs text-slate-400 leading-relaxed font-sans line-clamp-2">
+                      {course.description || "Comprehensive syllabus program meticulously designed to align directly with state standards."}
+                    </p>
+
+                    <div className="grid grid-cols-3 gap-2 py-2 text-[10px] text-slate-500 border-y border-slate-850/60 font-mono font-semibold">
+                      <div className="space-y-0.5">
+                        <span className="text-slate-650 uppercase text-[8px] tracking-widest block font-bold">Duration</span>
+                        <span className="text-slate-300 font-bold block">{course.duration}</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-slate-650 uppercase text-[8px] tracking-widest block font-bold">Lessons</span>
+                        <span className="text-slate-300 font-bold block">{course.lessonsCount} Chapters</span>
+                      </div>
+                      <div className="space-y-0.5">
+                        <span className="text-slate-650 uppercase text-[8px] tracking-widest block font-bold">Tutor</span>
+                        <span className="text-slate-300 font-bold block truncate" title={course.tutor}>{course.tutor}</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[8px] text-slate-500 uppercase tracking-widest block font-bold">Chapters Index</span>
+                      <div className="flex flex-wrap gap-1 max-h-[50px] overflow-y-auto pr-1">
+                        {course.chapters?.map((ch, i) => (
+                          <span key={i} className="text-[9px] bg-slate-900 border border-slate-850/80 text-slate-400 px-1.5 py-0.5 rounded-md font-sans">
+                            {ch}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Target Classes Badge */}
+                    <div className="space-y-1 pt-1.5 border-t border-slate-850/60">
+                      <span className="text-[8px] text-slate-500 uppercase tracking-widest block font-bold">Targeted Student Classes</span>
+                      <div className="flex flex-wrap gap-1">
+                        {((course.allowedGrades && course.allowedGrades.length > 0) || (course.allowedSections && course.allowedSections.length > 0)) ? (
+                          <>
+                            {course.allowedGrades?.map((g, gi) => (
+                              <span key={gi} className="text-[9px] bg-amber-500/10 text-amber-500 border border-amber-500/20 px-1.5 py-0.5 rounded font-bold font-sans">
+                                {g}
+                              </span>
+                            ))}
+                            {course.allowedSections?.map((sec, si) => (
+                              <span key={si} className="text-[9px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-1.5 py-0.5 rounded font-bold font-sans">
+                                Section {sec}
+                              </span>
+                            ))}
+                          </>
+                        ) : (
+                          <span className="text-[9px] bg-emerald-500/10 text-emerald-450 border border-emerald-500/15 px-1.5 py-0.5 rounded font-bold font-sans">
+                            All Student Classes
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center pt-4 mt-2 border-t border-slate-850/60">
+                    <span className="text-[8.5px] text-slate-500 uppercase tracking-widest font-mono select-none">
+                      ID: {course.id}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteCourse(course.id)}
+                      className="py-1 px-2.5 text-[10px] uppercase tracking-wider font-extrabold bg-[#0A0B0E] border border-slate-805 hover:bg-red-500/5 hover:border-red-500/20 text-slate-500 hover:text-red-400 rounded-lg cursor-pointer transition-all flex items-center gap-1 shrink-0 select-none"
+                    >
+                      <Trash2 size={11} />
+                      {lang === 'EN' ? "Delete" : "ስርዝ"}
+                    </button>
+                  </div>
+                </div>
+              ))}
+
+              {videoCourses.length === 0 && (
+                <div className="md:col-span-2 text-center py-12 bg-[#16181D] border border-slate-850 rounded-3xl space-y-3">
+                  <div className="w-10 h-10 rounded-full bg-slate-900/60 border border-emerald-500/10 text-slate-500 flex items-center justify-center mx-auto text-sm animate-pulse">
+                     📚
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs font-bold text-slate-305">{lang === 'EN' ? "Syllabus Catalog Empty" : "የቪዲዮ ኮርሶች ማውጫ ባዶ ነው"}</p>
+                    <p className="text-[11px] text-slate-500">{lang === 'EN' ? "Publish your first interactive student course to begin." : "ለመጀመር የመጀመሪያዎን የላቀ የቪዲዮ ትምህርት እዚህ ይጫኑ።"}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK SUBJECT MODAL */}
+      <AnimatePresence>
+        {showQuickSubjectModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs font-sans">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#16181D] border border-slate-805 rounded-3xl w-full max-w-md overflow-hidden shadow-2xl relative"
+            >
+              {/* Header */}
+              <div className="p-5 border-b border-slate-805 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 bg-amber-500/15 text-amber-500 rounded-lg">
+                    <BookOpen size={16} />
+                  </div>
+                  <h3 className="font-semibold text-sm text-white">
+                    {lang === 'EN' ? "Register New Subject" : lang === 'SO' ? "Kordhi Maaddo Cusub" : "አዲስ የትምህርት አይነት መመዝገቢያ"}
+                  </h3>
+                </div>
+                <button 
+                  onClick={() => setShowQuickSubjectModal(false)}
+                  className="text-slate-500 hover:text-white transition-colors cursor-pointer text-base font-bold pr-1"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Form Content */}
+              <form onSubmit={handleQuickRegisterSubject} className="p-6 space-y-4">
+                {quickSubjectSuccessMsg ? (
+                  <div className="p-4 bg-emerald-500/10 border border-emerald-500/25 text-emerald-400 text-xs rounded-xl flex items-center gap-2 animate-pulse justify-center py-8">
+                    <CheckCircle2 className="text-emerald-500 shrink-0" size={16} />
+                    <span className="font-bold">{quickSubjectSuccessMsg}</span>
+                  </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">
+                        {lang === 'EN' ? "Subject Title (English) *" : lang === 'SO' ? "Magaca Maaddada (English) *" : "የትምህርት ስም (እንግሊዝኛ) *"}
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="e.g. Science"
+                        value={quickSubName}
+                        onChange={(e) => setQuickSubName(e.target.value)}
+                        className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white placeholder-slate-650 focus:border-amber-500/50 outline-hidden font-sans"
+                      />
+                    </div>
+
+                     <div>
+                      <label className="block text-[10px] text-slate-500 uppercase font-semibold mb-1">
+                        {lang === 'EN' ? "Subject Code *" : "Koodhka Maaddada *"}
+                      </label>
+                      <input 
+                        type="text" 
+                        required
+                        placeholder="e.g. SCI"
+                        value={quickSubCode}
+                        onChange={(e) => setQuickSubCode(e.target.value)}
+                        className="w-full bg-[#0A0B0E] border border-slate-800 text-xs px-3.5 py-2.5 rounded-xl text-white placeholder-slate-650 focus:border-amber-500/50 outline-hidden font-mono"
+                      />
+                    </div>
+
+                    <div className="flex items-center pt-2">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input 
+                          type="checkbox"
+                          checked={quickSubIsNational}
+                          onChange={(e) => setQuickSubIsNational(e.target.checked)}
+                          className="rounded border-slate-800 bg-[#0A0B0E] text-amber-500 h-4 w-4 focus:ring-0 cursor-pointer"
+                        />
+                        <span className="text-[11px] text-slate-400 font-semibold">
+                          {lang === 'EN' ? "Ministry Standard Exam Subject" : lang === 'SO' ? "Maaddada Imtixaanka Wasaarada" : "አገር አቀፍ ተፈታኝ ይሁን"}
+                        </span>
+                      </label>
+                    </div>
+
+                    <div className="flex gap-3 pt-4 border-t border-slate-805">
+                      <button
+                        type="button"
+                        onClick={() => setShowQuickSubjectModal(false)}
+                        className="flex-1 py-2 px-3 bg-slate-900 hover:bg-slate-850 hover:text-white text-slate-400 font-bold text-xs rounded-xl cursor-pointer border border-slate-800"
+                      >
+                        {lang === 'EN' ? "Cancel" : lang === 'SO' ? "Ka Noqo" : "አሰርዝ"}
+                      </button>
+                      <button
+                        type="submit"
+                        className="flex-1 py-1.5 px-3 bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs rounded-xl shadow-md flex items-center justify-center gap-1 cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        {lang === 'EN' ? "Register Subject" : lang === 'SO' ? "Diiwangeli" : "መዝግብ"}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
     </div>
   );

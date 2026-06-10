@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 
 interface UserManualProps {
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
 }
 
 export default function UserManual({ lang }: UserManualProps) {

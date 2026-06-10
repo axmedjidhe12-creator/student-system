@@ -20,7 +20,10 @@ import {
   Tag,
   AlertTriangle,
   XCircle,
-  Info as InfoIcon
+  Info as InfoIcon,
+  Upload,
+  Image,
+  Camera
 } from 'lucide-react';
 
 interface ParsedBatchRow {
@@ -54,8 +57,25 @@ interface UserManagementProps {
   users: User[];
   setUsers: (users: User[]) => void;
   t: AppTranslations;
-  lang: 'EN' | 'AM' | 'SO';
+  lang: 'EN' | 'SO';
 }
+
+const isEthiopianPhone = (phoneNum: string): boolean => {
+  if (!phoneNum) return false;
+  // Clean all characters except digits and check
+  const digits = phoneNum.replace(/\D/g, "");
+  if (digits.startsWith("251")) {
+    const afterPrefix = digits.slice(3);
+    return afterPrefix.length === 9 && (afterPrefix.startsWith("9") || afterPrefix.startsWith("7"));
+  }
+  if (digits.startsWith("09") || digits.startsWith("07")) {
+    return digits.length === 10;
+  }
+  if ((digits.startsWith("9") || digits.startsWith("7")) && digits.length === 9) {
+    return true;
+  }
+  return false;
+};
 
 export default function UserManagement({
   students,
@@ -152,6 +172,26 @@ export default function UserManagement({
     setValidatedRows([]);
   };
 
+  const handleLocalPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        if (typeof reader.result === 'string') {
+          setFPhotoUrl(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target.value;
+    // Allow digits, spaces, plus sign, and dashes
+    const filtered = input.replace(/[^0-9+\s-]/g, "");
+    setFPhone(filtered);
+  };
+
   const handleOpenEdit = (user: any) => {
     setSelectedUserForEdit(user);
     setFName(user.name);
@@ -190,6 +230,13 @@ export default function UserManagement({
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     if (!fName) return;
+
+    if (!fPhone || !isEthiopianPhone(fPhone)) {
+      alert(lang === 'EN'
+        ? "⚠️ Invalid Phone Number! Only valid Ethiopian phone numbers are allowed (+251 9... / 09...)."
+        : "⚠️ ትክክለኛ ያልሆነ ስልክ ቁጥር! የኢትዮጵያ ስልክ ቁጥር ብቻ ነው የሚፈቀደው (+251 9... / 09...)።");
+      return;
+    }
 
     if (isAdding) {
       const newId = `usr-${Date.now()}`;
@@ -514,14 +561,14 @@ export default function UserManagement({
       }
 
       if (row.phone) {
-        // Look for letters inside the phone
-        const rawDigitsOnly = row.phone.replace(/[\s\-\+\(\)]/g, '');
-        if (/[a-zA-Z]/.test(row.phone) || rawDigitsOnly.length < 7) {
+        if (!isEthiopianPhone(row.phone)) {
           issues.push({
             rowNumber: rowNum,
             type: 'warning',
             field: 'Phone Number',
-            message: lang === 'EN' ? `Data Format Warning: Phone number '${row.phone}' contains alphabets or is too short.` : `የቅርጸት ችግር፡ የስልክ ቁጥር '${row.phone}' ፊደላት አለበት ወይም በጣም አጭር ነው።`
+            message: lang === 'EN' 
+              ? `Data Format Warning: Phone number '${row.phone}' is not a valid Ethiopian phone format. Use +251 9... or 09...` 
+              : `የቅርጸት ችግር፡ የስልክ ቁጥር '${row.phone}' ትክክለኛ የኢትዮጵያ ስልክ ቁጥር አልተጠቀሰም። እባክዎ +251 9... ወይም 09... ይጠቀሙ።`
           });
         }
       }
@@ -960,7 +1007,7 @@ usr-teacher-new, Kibrom Gidey, kibrom@example.com, +251987654321, Physics, TCH-4
             <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               {/* Common fields */}
               <div>
-                <label className="block text-[11px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">{lang === 'EN' ? "English Name *" : "ስም በኢንግሊዝኛ *"}</label>
+                <label className="block text-[11px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">{lang === 'EN' ? "Full Name *" : "Magaca oo Buuxa *"}</label>
                 <input 
                   type="text" 
                   value={fName} 
@@ -971,25 +1018,34 @@ usr-teacher-new, Kibrom Gidey, kibrom@example.com, +251987654321, Physics, TCH-4
               </div>
 
               <div>
-                <label className="block text-[11px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">{lang === 'EN' ? "Amharic Name" : "ስም በአማርኛ"}</label>
-                <input 
-                  type="text" 
-                  value={fNameAmharic} 
-                  onChange={(e) => setFNameAmharic(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-amber-600 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
                 <label className="block text-[11px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">{t.phone} *</label>
                 <input 
                   type="text" 
                   value={fPhone} 
-                  placeholder="+251 9..."
+                  placeholder="+251 9... or 09..."
                   required 
-                  onChange={(e) => setFPhone(e.target.value)}
-                  className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-200 focus:border-amber-600 focus:outline-hidden"
+                  onChange={handlePhoneChange}
+                  className={`w-full bg-slate-900/50 border rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-hidden transition-all ${
+                    fPhone && !isEthiopianPhone(fPhone) 
+                      ? 'border-rose-500 focus:border-rose-500 shadow-[0_0_8px_rgba(239,68,68,0.15)]' 
+                      : fPhone && isEthiopianPhone(fPhone)
+                        ? 'border-emerald-500/80 focus:border-emerald-500'
+                        : 'border-slate-800 focus:border-amber-600'
+                  }`}
                 />
+                {fPhone && !isEthiopianPhone(fPhone) && (
+                  <p className="text-[10px] text-rose-400 mt-1.5 font-semibold leading-relaxed">
+                    {lang === 'EN' 
+                      ? "⚠️ Please enter a valid Ethiopian phone number (+251 9... or 09... / 07...)"
+                      : "⚠️ እባክዎ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ያስገቡ (+251 9... ወይም 09... / 07...)"}
+                  </p>
+                )}
+                {fPhone && isEthiopianPhone(fPhone) && (
+                  <p className="text-[10px] text-emerald-400 mt-1.5 font-semibold flex items-center gap-1">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-emerald-450 animate-pulse" />
+                    {lang === 'EN' ? "✓ Valid Ethiopian phone number" : "✓ ትክክለኛ የኢትዮጵያ ስልክ ቁጥር ነው"}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1015,14 +1071,92 @@ usr-teacher-new, Kibrom Gidey, kibrom@example.com, +251987654321, Physics, TCH-4
               </div>
 
               <div>
-                <label className="block text-[11px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">{lang === 'EN' ? "Profile Photo URL" : "የመገለጫ ፎቶ URL"}</label>
-                <input 
-                  type="text" 
-                  value={fPhotoUrl} 
-                  onChange={(e) => setFPhotoUrl(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-205 focus:border-amber-600 focus:outline-hidden"
-                />
+                <label className="block text-[11px] text-slate-400 font-bold mb-1.5 uppercase tracking-wider">
+                  {lang === 'EN' ? "Profile Photo" : "የተማሪ መገለጫ ፎቶ"}
+                </label>
+                
+                <div className="space-y-3">
+                  {/* Text Input for URL */}
+                  <input 
+                    type="text" 
+                    value={fPhotoUrl} 
+                    onChange={(e) => setFPhotoUrl(e.target.value)}
+                    placeholder="https://images.unsplash.com/..."
+                    className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-205 focus:border-amber-600 focus:outline-hidden"
+                  />
+
+                  {/* File Upload Zone */}
+                  <div className="flex items-center gap-3">
+                    <label className="flex-1 flex flex-col items-center justify-center border border-dashed border-slate-800 hover:border-amber-600/50 bg-[#16181D]/40 rounded-xl p-3 cursor-pointer group transition-all text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <Upload size={14} className="text-slate-500 group-hover:text-amber-500 transition-colors" />
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {lang === 'EN' ? "Upload Offline Photo (PC Files)" : "ከኮምፒውተርዎ ፋይል ይጫኑ"}
+                        </span>
+                        <span className="text-[8px] text-slate-600">JPEG, PNG, WebP (Data URL)</span>
+                      </div>
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleLocalPhotoUpload} 
+                        className="hidden" 
+                      />
+                    </label>
+
+                    {/* Image Preview Window */}
+                    {fPhotoUrl && (
+                      <div className="relative shrink-0">
+                        <img 
+                          src={fPhotoUrl} 
+                          alt="Uploaded Preview" 
+                          referrerPolicy="no-referrer"
+                          className="w-16 h-16 rounded-xl object-cover border border-amber-605 shadow-md bg-slate-900" 
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setFPhotoUrl("")}
+                          className="absolute -top-1.5 -right-1.5 bg-red-650 hover:bg-red-500 text-white w-4 h-4 rounded-full text-[8px] font-bold flex items-center justify-center cursor-pointer shadow"
+                          title="Clear Image"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Student Photo Presets */}
+                  <div className="space-y-1">
+                    <label className="block text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                      {lang === 'EN' ? "Or Quick Scholar Presets:" : "ወይንም ፈጣን የተዘጋጁ ፎቶዎች ይምረጡ፡"}
+                    </label>
+                    <div className="flex flex-wrap gap-2 pt-0.5">
+                      {[
+                        { url: "https://images.unsplash.com/photo-1544717305-2782549b5136?w=150&auto=format&fit=crop", label: "Abebech" },
+                        { url: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop", label: "Yared" },
+                        { url: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop", label: "Chaltu" },
+                        { url: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop", label: "Mekonnen" },
+                        { url: "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop", label: "Aster" },
+                        { url: "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=150&auto=format&fit=crop", label: "Dawit" }
+                      ].map((preset, pIdx) => (
+                        <button
+                          key={pIdx}
+                          type="button"
+                          onClick={() => setFPhotoUrl(preset.url)}
+                          className={`relative rounded-lg overflow-hidden border-2 transition-all p-0 w-8 h-8 cursor-pointer ${
+                            fPhotoUrl === preset.url ? "border-amber-500 scale-110 shadow-md" : "border-slate-800 hover:border-slate-650"
+                          }`}
+                          title={preset.label}
+                        >
+                          <img 
+                            src={preset.url} 
+                            alt={preset.label} 
+                            className="w-full h-full object-cover" 
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div>
